@@ -69,7 +69,8 @@ class GuaZiCrawler():
         :return: 
         '''
         content = self.get_page(detail_url)
-
+        print content
+        sys.exit()
         data_dict = {
             'title': content('h2.titlebox').text().strip(),
             'bordingdate': content('ul[@class="assort clearfix"] li[@class="one"] span').text(),
