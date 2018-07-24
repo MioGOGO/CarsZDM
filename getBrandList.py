@@ -1,8 +1,19 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import re
 import requests
 from pyquery import PyQuery as pq
 import sys,json
+import datetime,traceback
+import threading,MySQLdb
+from contextlib import closing
+import threading
+
+defaultencoding = 'utf-8'
+if sys.getdefaultencoding() != defaultencoding:
+    reload(sys)
+    sys.setdefaultencoding(defaultencoding)
+
 
 headers ={
 'Connection':'keep-alive'
@@ -25,6 +36,14 @@ class GuaZiCrawler():
         self.sess = requests.Session()
         self.sess.headers = headers
         self.start_url = 'https://www.guazi.com/bj/buy/'
+        self.db_config = {
+            'host': '127.0.0.1',
+            'port': 3306,
+            'user': 'root',
+            'passwd': 'miaowudi12',
+            'db': 'mydb',
+            'charset': 'utf8'
+            }
 
 
     def get_page(self, url):
@@ -42,18 +61,26 @@ class GuaZiCrawler():
         :return: 
         '''
         content = self.get_page(start_url)
-        # for each in content('div[@class="dd-all clearfix js-brand js-option-hid-info"] > ul > li > p > a').items() :
-        #     url = each.attr.href
-        #     print url
-        #     con = each.text().encode('utf-8')
-        #     print con
-        # sys.exit()
+        listBank = []
+        for each in content('div[@class="dd-all clearfix js-brand js-option-hid-info"] > ul > li > p > a').items() :
+            tmp = []
+            url = each.attr.href
+            enName = url.split("/")[2]
+            con = each.text().encode('utf-8')
+            tmp.append('guazi')
+            tmp.append( enName )
+            tmp.append( con )
+            tmp.append( url )
+            listBank.append(tmp)
+        self.insertBandInfo( listBank )
+        sys.exit()
         page_num_max = max([int(each.text()) for each in content('ul[@class="pageLink clearfix"]  > li > a').items() if re.match(r'\d+', each.text())])
 
         page_url_list = []
         for i in range(1,page_num_max+1,1):
             base_url = 'https://www.guazi.com/qd/buy/o{}/#bread'.format(i)
             page_url_list.append(base_url)
+
         return page_url_list
 
     def index_page(self, start_url):
@@ -76,6 +103,8 @@ class GuaZiCrawler():
         :return: 
         '''
         content = self.get_page(detail_url)
+        print content
+        sys.exit()
         data_dict = {
             'title': content('h2.titlebox').text().strip(),
             'bordingdate': content('ul[@class="assort clearfix"] li[@class="one"] span').text(),
@@ -88,6 +117,21 @@ class GuaZiCrawler():
 
         return data_dict
 
+    def insertBandInfo( self,tupe ):
+        sql = ('insert into mydb.BandInfo(PTFrom,EnName,CHName,Url)'
+        'values(%s,%s,%s,%s)'
+        'on duplicate key update CHName=values(CHName),Url=values(Url)')
+        self.execSql( sql,tupe )
+    #sys.exit(0)
+
+    def execSql( self,sql,tupe ):
+        try:
+            conn = MySQLdb.connect(**self.db_config)
+            with closing(conn.cursor()) as cursor:
+                cursor.executemany(sql, tupe)
+                conn.commit()
+        except MySQLdb.Error,e:
+            print "Mysql Error %d: %s" % (e.args[0], e.args[1])
 
     def run(self):
         for pageurl in self.page_url(self.start_url):
